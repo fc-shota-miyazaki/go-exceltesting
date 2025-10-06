@@ -16,23 +16,30 @@ import (
 
 var mysqlConn *sql.DB
 
-func TestMain(m *testing.M) {
-	// MySQL接続文字列
-	uri := os.Getenv("EXCELTESTING_MYSQL_CONNECTION")
-	if uri == "" {
-		uri = "mysql://excellocal:password@mysql:3306/excellocal"
+func openMySQLTestingConn(t *testing.T) *sql.DB {
+	t.Helper()
+
+	if mysqlConn != nil {
+		return mysqlConn
 	}
 
-	// go-sql-driver/mysql は URI ではなく DSN を受け取るため、必要に応じて変換
+	uri := os.Getenv("EXCELTESTING_MYSQL_CONNECTION")
+	if uri == "" {
+		t.Skip("EXCELTESTING_MYSQL_CONNECTION が未設定のためMySQLテストをスキップします")
+	}
+
 	dsn := uri
 	if strings.HasPrefix(uri, "mysql://") {
 		u, err := url.Parse(uri)
 		if err != nil {
-			os.Exit(1)
+			t.Fatal(err)
 		}
 		user := u.User.Username()
 		pass, _ := u.User.Password()
-		host := u.Host // host:port
+		host := u.Host
+		if strings.HasPrefix(host, "localhost") {
+			host = strings.Replace(host, "localhost", "127.0.0.1", 1)
+		}
 		dbname := strings.TrimPrefix(u.Path, "/")
 		if u.RawQuery != "" {
 			dsn = fmt.Sprintf("%s:%s@tcp(%s)/%s?%s", user, pass, host, dbname, u.RawQuery)
@@ -41,26 +48,45 @@ func TestMain(m *testing.M) {
 		}
 	}
 
-	var err error
-	mysqlConn, err = sql.Open("mysql", dsn)
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		os.Exit(1)
+		t.Fatal(err)
 	}
-	if err = mysqlConn.Ping(); err != nil {
-		os.Exit(1)
+	if err = db.Ping(); err != nil {
+		t.Fatal(err)
 	}
-
-	code := m.Run()
-	mysqlConn.Close()
-	os.Exit(code)
+	// スキーマ投入
+	if b, err := os.ReadFile(filepath.Join("testdata", "schema", "mysql_ddl.sql")); err == nil {
+		tx, err := db.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+		queries := strings.Split(string(b), ";")
+		for _, q := range queries {
+			q = strings.TrimSpace(q)
+			if q == "" {
+				continue
+			}
+			if _, err := tx.Exec(q); err != nil {
+				tx.Rollback()
+				t.Fatalf("schema exec error: %v, query=%s", err, q)
+			}
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mysqlConn = db
+	return mysqlConn
 }
 
 func TestExample_LoadMySQL(t *testing.T) {
-	if _, err := mysqlConn.Exec("TRUNCATE TABLE company;"); err != nil {
+	conn := openMySQLTestingConn(t)
+	if _, err := conn.Exec("TRUNCATE TABLE company;"); err != nil {
 		t.Fatal(err)
 	}
 
-	e := exceltesting.New(mysqlConn)
+	e := exceltesting.New(conn)
 
 	e.Load(t, exceltesting.LoadRequest{
 		TargetBookPath: filepath.Join("testdata", "load_example.xlsx"),
@@ -70,7 +96,8 @@ func TestExample_LoadMySQL(t *testing.T) {
 }
 
 func TestExample_LoadRawFromCSVMySQL(t *testing.T) {
-	if _, err := mysqlConn.Exec("TRUNCATE TABLE company;"); err != nil {
+	conn := openMySQLTestingConn(t)
+	if _, err := conn.Exec("TRUNCATE TABLE company;"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -86,7 +113,7 @@ func TestExample_LoadRawFromCSVMySQL(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tx, err := mysqlConn.Begin()
+	tx, err := conn.Begin()
 	if err != nil {
 		t.Fatal(err)
 	}
