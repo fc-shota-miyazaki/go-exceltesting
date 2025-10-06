@@ -5,18 +5,38 @@ import (
 	"encoding/csv"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/future-architect/go-exceltesting"
+	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v4/stdlib"
 )
 
 var conn *sql.DB
 
+// getDriverFromDSN は接続文字列から適切なドライバー名を返します
+func getDriverFromDSN(dsn string) string {
+	if strings.HasPrefix(dsn, "mysql://") {
+		return "mysql"
+	}
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		return "pgx"
+	}
+	// デフォルトはPostgreSQL
+	return "pgx"
+}
+
 func TestMain(m *testing.M) {
-	uri := "postgres://excellocal:password@localhost:15432/excellocal"
+	// 環境変数から接続文字列を取得
+	uri := os.Getenv("EXCELTESTING_CONNECTION")
+	if uri == "" {
+		uri = "postgres://excellocal:password@localhost:15432/excellocal"
+	}
+	
 	var err error
-	conn, err = sql.Open("pgx", uri)
+	driver := getDriverFromDSN(uri)
+	conn, err = sql.Open(driver, uri)
 	if err != nil {
 		os.Exit(1)
 	}

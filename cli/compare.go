@@ -10,6 +10,7 @@ import (
 
 	"github.com/future-architect/go-exceltesting"
 
+	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v4/stdlib"
 )
 
@@ -18,9 +19,10 @@ func Compare(dbSource string, r exceltesting.CompareRequest) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	db, err := sql.Open("pgx", dbSource)
+	driver := getDriverFromDSN(dbSource)
+	db, err := sql.Open(driver, dbSource)
 	if err != nil {
-		return fmt.Errorf("postgres oepn: %w", err)
+		return fmt.Errorf("database open: %w", err)
 	}
 	e := exceltesting.New(db)
 
