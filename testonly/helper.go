@@ -7,23 +7,41 @@ import (
 	"strings"
 	"testing"
 
+	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v4/stdlib"
 )
+
+// getDriverFromDSN は接続文字列から適切なドライバー名を返します
+func getDriverFromDSN(dsn string) string {
+	if strings.HasPrefix(dsn, "mysql://") {
+		return "mysql"
+	}
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		return "pgx"
+	}
+	// デフォルトはPostgreSQL
+	return "pgx"
+}
 
 func OpenTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 
-	const (
-		DBUser = "excellocal"
-		DBPass = "password"
-		DBHost = "localhost"
-		DBPort = "15432"
-		DBName = "excellocal"
-	)
+	// 環境変数から接続文字列を取得
+	dsn := os.Getenv("EXCELTESTING_CONNECTION")
+	if dsn == "" {
+		// デフォルトのPostgreSQL接続文字列
+		const (
+			DBUser = "excellocal"
+			DBPass = "password"
+			DBHost = "localhost"
+			DBPort = "15432"
+			DBName = "excellocal"
+		)
+		dsn = fmt.Sprintf("postgres://%s:%s@%s:%s/%s", DBUser, DBPass, DBHost, DBPort, DBName)
+	}
 
-	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s", DBUser, DBPass, DBHost, DBPort, DBName)
-
-	db, err := sql.Open("pgx", dsn)
+	driver := getDriverFromDSN(dsn)
+	db, err := sql.Open(driver, dsn)
 	if err != nil {
 		t.Fatalf("failed to open db: %v", err)
 	}

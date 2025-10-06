@@ -18,6 +18,24 @@ services:
     volumes:
       - ./testdata/schema:/docker-entrypoint-initdb.d
 
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_USER: excellocal
+      MYSQL_PASSWORD: password
+      MYSQL_DATABASE: excellocal
+      TZ: "Asia/Tokyo"
+    ports:
+      - "13306:3306"
+    healthcheck:
+      test: mysqladmin ping -h localhost -u excellocal -ppassword
+      timeout: 45s
+      interval: 10s
+      retries: 10
+    volumes:
+      - ./testdata/schema/mysql_ddl.sql:/docker-entrypoint-initdb.d/01-mysql-ddl.sql
+
   devcontainer:
     image: golang:1.19-bullseye
     working_dir: /workspace
@@ -28,5 +46,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      mysql:
+        condition: service_healthy
     environment:
       EXCELTESTING_CONNECTION: "postgres://excellocal:password@postgres:5432/excellocal?sslmode=disable"
+      EXCELTESTING_MYSQL_CONNECTION: "mysql://excellocal:password@mysql:3306/excellocal"

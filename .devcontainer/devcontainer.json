@@ -28,15 +28,20 @@
       }
     }
   },
-  "forwardPorts": [15432],
+  "forwardPorts": [15432,13306],
   "portsAttributes": {
     "15432": {
       "label": "PostgreSQL",
+      "onAutoForward": "notify"
+    },
+    "13306": {
+      "label": "MySQL",
       "onAutoForward": "notify"
     }
   },
   "postCreateCommand": "go mod download",
   "containerEnv": {
-    "EXCELTESTING_CONNECTION": "postgres://excellocal:password@postgres:5432/excellocal?sslmode=disable"
+    "EXCELTESTING_CONNECTION": "postgres://excellocal:password@postgres:5432/excellocal?sslmode=disable",
+    "EXCELTESTING_MYSQL_CONNECTION": "mysql://excellocal:password@mysql:3306/excellocal"
   }
 }

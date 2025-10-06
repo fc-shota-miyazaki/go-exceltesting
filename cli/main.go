@@ -8,6 +8,7 @@ import (
 	"github.com/joho/godotenv"
 	"gopkg.in/alecthomas/kingpin.v2"
 
+	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v4/pgxpool"
 )
 
