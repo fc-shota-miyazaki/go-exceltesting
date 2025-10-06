@@ -1,7 +1,7 @@
 package main
 
-import "github.com/future-architect/go-exceltesting/cli"
+import "github.com/fc-shota-miyazaki/go-exceltesting/cli"
 
 func main() {
-	cli.Main()
+    cli.Main()
 }

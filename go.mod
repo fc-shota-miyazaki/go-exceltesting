@@ -1,4 +1,4 @@
-module github.com/future-architect/go-exceltesting
+module github.com/fc-shota-miyazaki/go-exceltesting
 
 go 1.19
 

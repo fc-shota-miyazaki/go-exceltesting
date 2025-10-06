@@ -1,9 +1,9 @@
 # go-exceltesting
 
-[![GoDev](https://img.shields.io/static/v1?label=godev&message=reference&color=00add8)][godoc] [![test](https://github.com/future-architect/go-exceltesting/actions/workflows/test.yml/badge.svg)][test]
+[![GoDev](https://img.shields.io/static/v1?label=godev&message=reference&color=00add8)][godoc] [![test](https://github.com/fc-shota-miyazaki/go-exceltesting/actions/workflows/test.yml/badge.svg)][test]
 
-[godoc]: https://pkg.go.dev/github.com/future-architect/go-exceltesting
-[test]: https://github.com/future-architect/go-exceltesting/actions/workflows/test.yml
+[godoc]: https://pkg.go.dev/github.com/fc-shota-miyazaki/go-exceltesting
+[test]: https://github.com/fc-shota-miyazaki/go-exceltesting/actions/workflows/test.yml
 
 GoでExcelを使ったテーブルドリブンテストを行うためのヘルパーライブラリです。
 
@@ -25,7 +25,7 @@ GoでExcelを使ったテーブルドリブンテストを行うためのヘル�
 ## インストール
 
 ```
-go get github.com/future-architect/go-exceltesting@latest
+go get github.com/fc-shota-miyazaki/go-exceltesting@latest
 ```
 
 ## CLI インターフェース
@@ -35,7 +35,7 @@ go get github.com/future-architect/go-exceltesting@latest
 ### Install
 
 ```sh
-go install github.com/future-architect/go-exceltesting/cmd/exceltesting@latest
+go install github.com/fc-shota-miyazaki/go-exceltesting/cmd/exceltesting@latest
 ```
 
 ### Setup

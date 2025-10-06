@@ -4,7 +4,7 @@ import (
 	"os"
 
 	"github.com/fatih/color"
-	"github.com/future-architect/go-exceltesting"
+	"github.com/fc-shota-miyazaki/go-exceltesting"
 	"github.com/joho/godotenv"
 	"gopkg.in/alecthomas/kingpin.v2"
 

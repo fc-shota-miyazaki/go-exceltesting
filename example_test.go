@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/future-architect/go-exceltesting"
+	"github.com/fc-shota-miyazaki/go-exceltesting"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v4/stdlib"
 )
@@ -33,7 +33,7 @@ func TestMain(m *testing.M) {
 	if uri == "" {
 		uri = "postgres://excellocal:password@localhost:15432/excellocal"
 	}
-	
+
 	var err error
 	driver := getDriverFromDSN(uri)
 	conn, err = sql.Open(driver, uri)
