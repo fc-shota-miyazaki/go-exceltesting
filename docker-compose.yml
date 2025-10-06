@@ -17,3 +17,16 @@ services:
       retries: 10
     volumes:
       - ./testdata/schema:/docker-entrypoint-initdb.d
+
+  devcontainer:
+    image: golang:1.19-bullseye
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:cached
+    command: sleep infinity
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      EXCELTESTING_CONNECTION: "postgres://excellocal:password@postgres:5432/excellocal?sslmode=disable"
