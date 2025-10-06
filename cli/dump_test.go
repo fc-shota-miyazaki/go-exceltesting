@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"github.com/future-architect/go-exceltesting/testonly"
+    "github.com/fc-shota-miyazaki/go-exceltesting/testonly"
 	"github.com/google/go-cmp/cmp"
 	"github.com/xuri/excelize/v2"
 	"path/filepath"

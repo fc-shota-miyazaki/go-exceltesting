@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/future-architect/go-exceltesting"
+	"github.com/fc-shota-miyazaki/go-exceltesting"
 	_ "github.com/go-sql-driver/mysql"
 )
 

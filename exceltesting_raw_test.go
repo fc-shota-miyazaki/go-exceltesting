@@ -1,7 +1,7 @@
 package exceltesting
 
 import (
-	"github.com/future-architect/go-exceltesting/testonly"
+    "github.com/fc-shota-miyazaki/go-exceltesting/testonly"
 	"path/filepath"
 	"testing"
 
