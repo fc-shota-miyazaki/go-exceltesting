@@ -1,0 +1,42 @@
+{
+  "name": "go-exceltesting",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "devcontainer",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+  "updateRemoteUserUID": "on",
+  "remoteUser": "root",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "ms-vscode.vscode-json",
+        "redhat.vscode-yaml",
+        "ms-vscode.vscode-docker",
+        "ms-vscode-remote.remote-containers"
+      ],
+      "settings": {
+        "go.toolsManagement.checkForUpdates": "local",
+        "go.useLanguageServer": true,
+        "go.gopath": "/go",
+        "go.goroot": "/usr/local/go",
+        "go.testFlags": ["-v"],
+        "go.testTimeout": "30s"
+      }
+    }
+  },
+  "forwardPorts": [15432],
+  "portsAttributes": {
+    "15432": {
+      "label": "PostgreSQL",
+      "onAutoForward": "notify"
+    }
+  },
+  "postCreateCommand": "go mod download",
+  "containerEnv": {
+    "EXCELTESTING_CONNECTION": "postgres://excellocal:password@postgres:5432/excellocal?sslmode=disable"
+  }
+}
