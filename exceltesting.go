@@ -330,8 +330,7 @@ func (e *exceltesing) loadExcelSheet(f *excelize.File, targetSheet string) (*tab
 // comparativeSource はデータベースに格納されている実際のテーブルの値と、Excelから取得した期待する結果の値を
 // 比較可能な値として取得します。
 func (e *exceltesing) comparativeSource(t *table, req *CompareRequest) ([][]x, [][]x, error) {
-	var pk string
-	err := e.db.QueryRow(getPrimaryKeyQuery, t.name).Scan(&pk)
+	pk, err := e.getPrimaryKeyColumns(t.name)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -384,8 +383,14 @@ func (e *exceltesing) insertData(t *table) error {
 }
 
 func (e *exceltesing) createTempTable(tableName string) error {
-	query := fmt.Sprintf("CREATE TEMP TABLE IF NOT EXISTS %s AS SELECT * FROM %s WHERE 0 = 1;", tempTablePrefix+tableName, tableName)
-	_, err := e.db.Exec(query)
+	// PostgreSQL 互換
+	queryPG := fmt.Sprintf("CREATE TEMP TABLE IF NOT EXISTS %s AS SELECT * FROM %s WHERE 0 = 1;", tempTablePrefix+tableName, tableName)
+	if _, err := e.db.Exec(queryPG); err == nil {
+		return nil
+	}
+	// MySQL 互換
+	queryMySQL := fmt.Sprintf("CREATE TEMPORARY TABLE IF NOT EXISTS %s AS SELECT * FROM %s WHERE 0 = 1;", tempTablePrefix+tableName, tableName)
+	_, err := e.db.Exec(queryMySQL)
 	return err
 }
 
@@ -443,10 +448,24 @@ type dbColumn struct {
 
 func (e *exceltesing) tableColumns(tableName string) ([]dbColumn, error) {
 	var columns []dbColumn
-
+	// まずはPostgreSQL向けクエリで試行
 	rows, err := e.db.Query(getTableNotNullColumns, tableName)
 	if err != nil {
-		return nil, err
+		// MySQL向けのクエリにフォールバック
+		const mysqlNotNullQuery = `
+SELECT
+  column_name,
+  data_type
+FROM information_schema.columns
+WHERE table_schema = DATABASE()
+  AND table_name = ?
+  AND is_nullable = 'NO'
+  AND column_default IS NULL
+ORDER BY ordinal_position;`
+		rows, err = e.db.Query(mysqlNotNullQuery, tableName)
+		if err != nil {
+			return nil, err
+		}
 	}
 	defer rows.Close()
 
@@ -461,6 +480,29 @@ func (e *exceltesing) tableColumns(tableName string) ([]dbColumn, error) {
 		return nil, err
 	}
 	return columns, nil
+}
+
+// getPrimaryKeyColumns は主キー列名をカンマ区切りで返します（複合主キー対応）
+func (e *exceltesing) getPrimaryKeyColumns(tableName string) (string, error) {
+	// PostgreSQL向けクエリを試行
+	var pk string
+	if err := e.db.QueryRow(getPrimaryKeyQuery, tableName).Scan(&pk); err == nil && pk != "" {
+		return pk, nil
+	}
+	// MySQL向けクエリにフォールバック
+	const mysqlPKQuery = `
+SELECT GROUP_CONCAT(column_name ORDER BY ordinal_position SEPARATOR ',') AS column_names
+FROM information_schema.KEY_COLUMN_USAGE
+WHERE table_schema = DATABASE()
+  AND table_name = ?
+  AND constraint_name = 'PRIMARY';`
+	if err := e.db.QueryRow(mysqlPKQuery, tableName).Scan(&pk); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(pk) == "" {
+		return "", fmt.Errorf("primary key not found: %s", tableName)
+	}
+	return pk, nil
 }
 
 func getExcelColumns(rows [][]string, rowNum int) []string {
@@ -483,7 +525,7 @@ func getExcelData(rows [][]string, rowNum int) ([][]string, error) {
 	columns := getExcelColumns(rows, rowNum)
 
 	var data [][]string
-	for i, row := range rows[rowNum:] {
+	for _, row := range rows[rowNum:] {
 		rowStr := ""
 		for _, cell := range row {
 			rowStr = rowStr + strings.Trim(strings.Trim(cell, "　"), " ")
@@ -491,14 +533,21 @@ func getExcelData(rows [][]string, rowNum int) ([][]string, error) {
 		if rowStr == "" {
 			continue
 		}
-		if len(row) < len(columns) {
-			return nil, fmt.Errorf("data size is smaller than defines. columns: %s row: %s data: %+v\n", fmt.Sprint(len(row)), fmt.Sprint(i+1), row)
-		}
 		// 1列目が空ならskip
 		if row[0] == "" {
 			continue
 		}
-		data = append(data, row[1:len(columns)+1])
+		// 不足セルを空文字でパディングして列数を揃える
+		padded := make([]string, len(columns))
+		for j := 0; j < len(columns); j++ {
+			idx := 1 + j // 先頭列(番号)を除外
+			if idx < len(row) {
+				padded[j] = strings.Trim(strings.Trim(row[idx], "　"), " ")
+			} else {
+				padded[j] = ""
+			}
+		}
+		data = append(data, padded)
 	}
 	return data, nil
 }

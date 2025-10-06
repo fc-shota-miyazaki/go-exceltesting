@@ -2,18 +2,20 @@ package cli
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgtype"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/xuri/excelize/v2"
-	"golang.org/x/exp/slices"
 	"os"
 	"os/signal"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/jackc/pgtype"
+	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/xuri/excelize/v2"
+	"golang.org/x/exp/slices"
 )
 
 const DefaultColumnCnt = 32
@@ -102,6 +104,17 @@ func Dump(dbSource, targetFile, tableNameArg, systemColumnArg string, maxDumpSiz
 		systemColumn = strings.Split(systemColumnArg, ",")
 	}
 
+	driver, dsn, err := normalizeDSN(dbSource)
+	if err != nil {
+		return fmt.Errorf("dsn normalize: %w", err)
+	}
+	if driver == "mysql" {
+		return dumpMySQL(ctx, dsn, targetFile, tableNames, systemColumn, maxDumpSize)
+	}
+	return dumpPostgres(ctx, dbSource, targetFile, tableNames, systemColumn, maxDumpSize)
+}
+
+func dumpPostgres(ctx context.Context, dbSource, targetFile string, tableNames, systemColumn []string, maxDumpSize int) error {
 	conn, err := pgxpool.Connect(ctx, dbSource)
 	if err != nil {
 		return fmt.Errorf("pgxpool connect: %w", err)
@@ -225,12 +238,9 @@ func Dump(dbSource, targetFile, tableNameArg, systemColumnArg string, maxDumpSiz
 			return fmt.Errorf("select exists records: %w", err)
 		}
 
-		// Add 3 empty row
+		// Add 3 empty row (only style, do not put numbers when no data)
 		vCell, _ := excelize.CoordinatesToCellName(1+len(tableDef.Columns), 12)
 		_ = f.SetCellStyle(sheetName, "A7", vCell, rowStyle)
-		_ = f.SetCellValue(sheetName, "A7", "1")
-		_ = f.SetCellValue(sheetName, "A8", "2")
-		_ = f.SetCellValue(sheetName, "A9", "3")
 
 		// データレコードがあれば上書き
 		if len(records) > 0 {
@@ -260,6 +270,191 @@ func Dump(dbSource, targetFile, tableNameArg, systemColumnArg string, maxDumpSiz
 		return fmt.Errorf("dump result save: %w", err)
 	}
 
+	return nil
+}
+
+// MySQL対応: dumpMySQLはinformation_schemaからカラム情報を取得し、SELECTで実データを取得する
+func dumpMySQL(ctx context.Context, dsn, targetFile string, tableNames, systemColumn []string, maxDumpSize int) error {
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return fmt.Errorf("mysql open: %w", err)
+	}
+	defer db.Close()
+
+	// 対象テーブルの決定
+	if len(tableNames) == 0 {
+		rows, err := db.QueryContext(ctx, `SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name`)
+		if err != nil {
+			return fmt.Errorf("list tables: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				return err
+			}
+			tableNames = append(tableNames, name)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+	}
+
+	// 各テーブルのカラム情報取得
+	type mysqlColumn struct {
+		name    string
+		comment string
+	}
+
+	defs := make([]TableDef, 0, len(tableNames))
+	for _, tn := range tableNames {
+		// テーブルコメント
+		var tableComment string
+		_ = db.QueryRowContext(ctx, `SELECT table_comment FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?`, tn).Scan(&tableComment)
+
+		// カラム
+		cols := []ColumnDef{}
+		rows, err := db.QueryContext(ctx, `SELECT column_name, IFNULL(column_comment, ''), data_type, is_nullable, IFNULL(column_default, '') FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? ORDER BY ordinal_position`, tn)
+		if err != nil {
+			return fmt.Errorf("list columns: %w", err)
+		}
+		for rows.Next() {
+			var (
+				colName, colComment, dataType, isNullable, defaultVal string
+			)
+			if err := rows.Scan(&colName, &colComment, &dataType, &isNullable, &defaultVal); err != nil {
+				rows.Close()
+				return err
+			}
+			constraint := ""
+			if strings.EqualFold(isNullable, "NO") {
+				constraint = "NOT NULL"
+			}
+			cols = append(cols, ColumnDef{
+				Name:         colName,
+				Comment:      colComment,
+				DataType:     dataType,
+				Constraint:   constraint,
+				DefaultValue: defaultVal,
+			})
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
+
+		defs = append(defs, TableDef{
+			Name:    tn,
+			Comment: tableComment,
+			Columns: cols,
+		})
+	}
+
+	if len(defs) == 0 {
+		return errors.New("table not found")
+	}
+
+	f := excelize.NewFile()
+	var (
+		rowHeaderStyle, _          = f.NewStyle(&excelize.Style{Border: []excelize.Border{{Type: "top", Style: 1, Color: "000000"}, {Type: "left", Style: 1, Color: "000000"}, {Type: "right", Style: 1, Color: "000000"}, {Type: "bottom", Style: 1, Color: "000000"}}, Fill: excelize.Fill{Type: "pattern", Color: []string{"#D9D9D9"}, Pattern: 1}})
+		columnHeaderStyle, _       = f.NewStyle(&excelize.Style{Border: []excelize.Border{{Type: "top", Style: 1, Color: "#000000"}, {Type: "left", Style: 1, Color: "#000000"}, {Type: "right", Style: 1, Color: "#000000"}, {Type: "bottom", Style: 1, Color: "#000000"}}, Fill: excelize.Fill{Type: "pattern", Color: []string{"#FCD5B4"}, Pattern: 1}})
+		columnHeaderSystemStyle, _ = f.NewStyle(&excelize.Style{Border: []excelize.Border{{Type: "top", Style: 1, Color: "000000"}, {Type: "left", Style: 1, Color: "000000"}, {Type: "right", Style: 1, Color: "000000"}, {Type: "bottom", Style: 1, Color: "000000"}}, Fill: excelize.Fill{Type: "pattern", Color: []string{"#BFBFBF"}, Pattern: 1}})
+		rowStyle, _                = f.NewStyle(&excelize.Style{Border: []excelize.Border{{Type: "top", Style: 1, Color: "000000"}, {Type: "left", Style: 1, Color: "000000"}, {Type: "right", Style: 1, Color: "000000"}, {Type: "bottom", Style: 1, Color: "000000"}}})
+	)
+
+	for i, tableDef := range defs {
+		sheetName := tableDef.Comment
+		if len(sheetName) == 0 {
+			sheetName = tableDef.Name
+		}
+		index := f.NewSheet(sheetName)
+		if i == 0 {
+			f.SetActiveSheet(index)
+		}
+		_ = f.SetCellValue(sheetName, "A1", tableDef.Comment)
+		_ = f.SetCellValue(sheetName, "A2", tableDef.Name)
+		_ = f.SetCellValue(sheetName, "A3", "version")
+		_ = f.SetCellValue(sheetName, "B3", "2.0")
+		_ = f.SetCellValue(sheetName, "A5", "項目名")
+		_ = f.SetCellValue(sheetName, "A6", "項目物理名")
+		_ = f.SetColWidth(sheetName, "A", "A", 12.86)
+		_ = f.SetCellStyle(sheetName, "A5", "A6", rowHeaderStyle)
+
+		for i, columnDef := range tableDef.Columns {
+			axisComment, _ := excelize.CoordinatesToCellName(2+i, 5)
+			axisName, _ := excelize.CoordinatesToCellName(2+i, 6)
+			_ = f.SetCellValue(sheetName, axisComment, columnDef.Comment)
+			_ = f.SetCellValue(sheetName, axisName, columnDef.Name)
+			currentCol, _ := excelize.ColumnNumberToName(2 + i)
+			width := utf8.RuneCountInString(columnDef.Comment) * 2
+			if width < utf8.RuneCountInString(columnDef.Name) {
+				width = utf8.RuneCountInString(columnDef.Name)
+			}
+			width += 2
+			_ = f.SetColWidth(sheetName, currentCol, currentCol, float64(width))
+			style := columnHeaderStyle
+			if slices.Contains(systemColumn, columnDef.Name) {
+				style = columnHeaderSystemStyle
+			}
+			_ = f.SetCellStyle(sheetName, axisComment, axisName, style)
+		}
+
+		// データ取得
+		rows, err := db.QueryContext(ctx, fmt.Sprintf("SELECT * FROM %s LIMIT %d", tableDef.Name, maxDumpSize))
+		if err != nil {
+			return fmt.Errorf("select exists records: %w", err)
+		}
+		defer rows.Close()
+
+		cols, err := rows.Columns()
+		if err != nil {
+			return err
+		}
+		// スキーマと一致しない場合は列数に合わせて調整
+		colCount := len(cols)
+		if colCount > len(tableDef.Columns) {
+			colCount = len(tableDef.Columns)
+		}
+
+		var records [][]any
+		for rows.Next() {
+			g := make([]any, colCount)
+			for i := range g {
+				g[i] = &g[i]
+			}
+			if err := rows.Scan(g...); err != nil {
+				return err
+			}
+			records = append(records, g)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+
+		vCell, _ := excelize.CoordinatesToCellName(1+len(tableDef.Columns), 12)
+		_ = f.SetCellStyle(sheetName, "A7", vCell, rowStyle)
+
+		if len(records) > 0 {
+			vCell, _ := excelize.CoordinatesToCellName(len(records[0])+1, len(records)+9)
+			_ = f.SetCellStyle(sheetName, "A10", vCell, rowStyle)
+			for i, record := range records {
+				rowNum := 7 + i
+				vCell, _ := excelize.CoordinatesToCellName(1, rowNum)
+				_ = f.SetCellValue(sheetName, vCell, fmt.Sprint(i+1))
+				for j, cell := range record {
+					colNum := j + 2
+					vCell, _ := excelize.CoordinatesToCellName(colNum, rowNum)
+					_ = f.SetCellValue(sheetName, vCell, fmtCell(cell))
+				}
+			}
+		}
+	}
+
+	f.DeleteSheet("Sheet1")
+	if err := f.SaveAs(targetFile); err != nil {
+		return fmt.Errorf("dump result save: %w", err)
+	}
 	return nil
 }
 
@@ -361,6 +556,8 @@ func fmtCell(a any) string {
 			return fmt.Sprintf("%v (fmtCell): %v", v, err)
 		}
 		return s
+	case []byte:
+		return string(v)
 	default:
 		return fmt.Sprint(v)
 	}

@@ -28,12 +28,13 @@ func (t *table) buildInsertSQL() string {
 			if i >= 1 {
 				rowSQLExp = fmt.Sprintf("%s, ", rowSQLExp)
 			}
-			if cell == "" {
+			v := strings.Trim(strings.Trim(cell, "　"), " ")
+			if v == "" || strings.EqualFold(v, "null") || strings.EqualFold(v, "<nil>") || strings.EqualFold(v, "(nil)") || strings.EqualFold(v, "nil") {
 				rowSQLExp += "null"
-			} else if slices.Contains(functionNames, cell) {
-				rowSQLExp += cell
+			} else if slices.Contains(functionNames, v) {
+				rowSQLExp += v
 			} else {
-				rowSQLExp += fmt.Sprintf("'%s'", cell)
+				rowSQLExp += fmt.Sprintf("'%s'", v)
 			}
 		}
 		rowSQLExp += ")"

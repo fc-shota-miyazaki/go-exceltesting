@@ -19,8 +19,11 @@ func Compare(dbSource string, r exceltesting.CompareRequest) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	driver := getDriverFromDSN(dbSource)
-	db, err := sql.Open(driver, dbSource)
+	driver, dsn, err := normalizeDSN(dbSource)
+	if err != nil {
+		return fmt.Errorf("dsn normalize: %w", err)
+	}
+	db, err := sql.Open(driver, dsn)
 	if err != nil {
 		return fmt.Errorf("database open: %w", err)
 	}
