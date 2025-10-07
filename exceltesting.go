@@ -559,20 +559,27 @@ func getFileNameWithoutExt(path string) string {
 }
 
 // x はDBの値にカラムを付与した構造体です。
-// go-cmp で結果と期待値を比較するときに、値に差分があったときにカラムも表示するために column を付与しています。
+// 比較出力を簡潔にするため、column/value は string に正規化します。
 type x struct {
-	column any
-	value  any
+	column string
+	value  string
 }
 
 func convert(vs [][]any, columns []string) [][]x {
 	resp := make([][]x, len(vs))
 	for i, r := range vs {
 		for j, v := range r {
-			resp[i] = append(resp[i], x{
-				column: columns[j],
-				value:  v,
-			})
+			// すべて文字列へ正規化
+			var s string
+			switch t := v.(type) {
+			case nil:
+				s = ""
+			case []byte:
+				s = string(t)
+			default:
+				s = fmt.Sprint(t)
+			}
+			resp[i] = append(resp[i], x{column: columns[j], value: s})
 		}
 	}
 	return resp
