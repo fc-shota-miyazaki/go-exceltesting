@@ -185,6 +185,17 @@ func dumpPostgres(ctx context.Context, dbSource, targetFile string, tableNames, 
 				{Type: "bottom", Style: 1, Color: "000000"},
 			},
 		})
+
+		// 値セルを文字列として扱うためのスタイル
+		valueTextStyle, _ = f.NewStyle(&excelize.Style{
+			NumFmt: 49, // Text
+			Border: []excelize.Border{
+				{Type: "top", Style: 1, Color: "000000"},
+				{Type: "left", Style: 1, Color: "000000"},
+				{Type: "right", Style: 1, Color: "000000"},
+				{Type: "bottom", Style: 1, Color: "000000"},
+			},
+		})
 	)
 
 	for i, tableDef := range defs {
@@ -259,6 +270,7 @@ func dumpPostgres(ctx context.Context, dbSource, targetFile string, tableNames, 
 					colNum := j + 2
 					vCell, _ := excelize.CoordinatesToCellName(colNum, rowNum)
 					_ = f.SetCellValue(sheetName, vCell, fmtCell(cell))
+					_ = f.SetCellStyle(sheetName, vCell, vCell, valueTextStyle)
 				}
 			}
 		}
@@ -298,12 +310,6 @@ func dumpMySQL(ctx context.Context, dsn, targetFile string, tableNames, systemCo
 		if err := rows.Err(); err != nil {
 			return err
 		}
-	}
-
-	// 各テーブルのカラム情報取得
-	type mysqlColumn struct {
-		name    string
-		comment string
 	}
 
 	defs := make([]TableDef, 0, len(tableNames))
@@ -361,6 +367,7 @@ func dumpMySQL(ctx context.Context, dsn, targetFile string, tableNames, systemCo
 		columnHeaderStyle, _       = f.NewStyle(&excelize.Style{Border: []excelize.Border{{Type: "top", Style: 1, Color: "#000000"}, {Type: "left", Style: 1, Color: "#000000"}, {Type: "right", Style: 1, Color: "#000000"}, {Type: "bottom", Style: 1, Color: "#000000"}}, Fill: excelize.Fill{Type: "pattern", Color: []string{"#FCD5B4"}, Pattern: 1}})
 		columnHeaderSystemStyle, _ = f.NewStyle(&excelize.Style{Border: []excelize.Border{{Type: "top", Style: 1, Color: "000000"}, {Type: "left", Style: 1, Color: "000000"}, {Type: "right", Style: 1, Color: "000000"}, {Type: "bottom", Style: 1, Color: "000000"}}, Fill: excelize.Fill{Type: "pattern", Color: []string{"#BFBFBF"}, Pattern: 1}})
 		rowStyle, _                = f.NewStyle(&excelize.Style{Border: []excelize.Border{{Type: "top", Style: 1, Color: "000000"}, {Type: "left", Style: 1, Color: "000000"}, {Type: "right", Style: 1, Color: "000000"}, {Type: "bottom", Style: 1, Color: "000000"}}})
+		valueTextStyle, _          = f.NewStyle(&excelize.Style{NumFmt: 49, Border: []excelize.Border{{Type: "top", Style: 1, Color: "000000"}, {Type: "left", Style: 1, Color: "000000"}, {Type: "right", Style: 1, Color: "000000"}, {Type: "bottom", Style: 1, Color: "000000"}}})
 	)
 
 	for i, tableDef := range defs {
@@ -446,6 +453,7 @@ func dumpMySQL(ctx context.Context, dsn, targetFile string, tableNames, systemCo
 					colNum := j + 2
 					vCell, _ := excelize.CoordinatesToCellName(colNum, rowNum)
 					_ = f.SetCellValue(sheetName, vCell, fmtCell(cell))
+					_ = f.SetCellStyle(sheetName, vCell, vCell, valueTextStyle)
 				}
 			}
 		}
