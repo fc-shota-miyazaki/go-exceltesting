@@ -16,7 +16,7 @@ var Version = "0.6.0"
 
 var (
 	app    = kingpin.New("exceltesting", "Excel file driven testing helper tool").Version(Version)
-	source = app.Flag("source", `Database source (e.g. postgres://user:pass@host/dbname?sslmode=disable). EXCELTESTING_CONNECTION envvar is acceptable.`).Short('c').Envar("EXCELTESTING_CONNECTION").String()
+	source = app.Flag("source", `Database source (e.g. postgres://user:pass@host/dbname?sslmode=disable, mysql://user:pass@host/dbname). EXCELTESTING_CONNECTION envvar is acceptable.`).Short('c').Envar("EXCELTESTING_CONNECTION").String()
 
 	dumpCommand        = app.Command("dump", "Generate excel template file from database")
 	dumpFile           = dumpCommand.Arg("file", "Target excel file path (e.g. dump.xlsx)").Required().NoEnvar().String()
